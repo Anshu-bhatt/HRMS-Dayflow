@@ -141,6 +141,58 @@ class AttendanceSummary(BaseModel):
     records: list[AttendanceRecord]
 
 
+# ==================== Leave Models ====================
+
+class LeaveApplyRequest(BaseModel):
+    """Request model for applying leave"""
+    leave_type: str  # "Paid", "Sick", "Unpaid"
+    start_date: str  # Format: YYYY-MM-DD
+    end_date: str    # Format: YYYY-MM-DD
+    remarks: Optional[str] = None
+
+
+class LeaveActionRequest(BaseModel):
+    """Request model for approving/rejecting leave"""
+    admin_comment: Optional[str] = None
+
+
+class LeaveRecord(BaseModel):
+    """Response model for leave record"""
+    leave_id: str
+    user_id: str
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    leave_type: str
+    start_date: str
+    end_date: str
+    remarks: Optional[str] = None
+    status: str  # "Pending", "Approved", "Rejected"
+    admin_comment: Optional[str] = None
+    created_at: str
+
+
+# ==================== Payroll Models ====================
+
+class PayrollData(BaseModel):
+    """Response model for payroll data"""
+    user_id: str
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    basic_pay: float = 0.0
+    allowances: float = 0.0
+    deductions: float = 0.0
+    net_salary: float = 0.0
+    pay_cycle: str = "Monthly"
+    updated_at: Optional[str] = None
+
+
+class PayrollUpdateRequest(BaseModel):
+    """Request model for updating payroll (admin only)"""
+    basic_pay: Optional[float] = None
+    allowances: Optional[float] = None
+    deductions: Optional[float] = None
+
+
 # ==================== Helper Functions ====================
 
 def verify_firebase_token(authorization: Optional[str] = Header(None)) -> str:
@@ -795,6 +847,563 @@ async def get_all_attendance(
     except Exception as e:
         print(f"[GET ALL ATTENDANCE ERROR] {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error fetching attendance: {str(e)}")
+
+
+# ==================== Leave Endpoints ====================
+
+@app.post("/leave/apply", tags=["Leave"])
+async def apply_leave(
+    request: LeaveApplyRequest,
+    uid: str = Depends(verify_firebase_token)
+):
+    """
+    Apply for leave (Employee).
+    - Validates leave type and date range
+    - Checks for overlapping leave requests
+    - Creates leave request with 'Pending' status
+    """
+    if not db:
+        raise HTTPException(status_code=500, detail="Firestore not configured")
+    
+    try:
+        from datetime import datetime as dt_module
+        
+        # Validate leave type
+        valid_leave_types = ["Paid", "Sick", "Unpaid"]
+        if request.leave_type not in valid_leave_types:
+            raise HTTPException(status_code=400, detail=f"Invalid leave type. Must be one of: {valid_leave_types}")
+        
+        # Validate date format and range
+        try:
+            start = dt_module.strptime(request.start_date, "%Y-%m-%d")
+            end = dt_module.strptime(request.end_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        
+        if end < start:
+            raise HTTPException(status_code=400, detail="End date cannot be before start date")
+        
+        # Check for overlapping leave requests (only pending or approved)
+        existing_leaves = db.collection("leaves").where("user_id", "==", uid).stream()
+        
+        for doc in existing_leaves:
+            leave_data = doc.to_dict()
+            if leave_data.get("status") == "Rejected":
+                continue  # Skip rejected leaves
+            
+            existing_start = dt_module.strptime(leave_data.get("start_date"), "%Y-%m-%d")
+            existing_end = dt_module.strptime(leave_data.get("end_date"), "%Y-%m-%d")
+            
+            # Check for overlap: (start1 <= end2) and (end1 >= start2)
+            if start <= existing_end and end >= existing_start:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Leave dates overlap with existing {leave_data.get('status').lower()} leave from {leave_data.get('start_date')} to {leave_data.get('end_date')}"
+                )
+        
+        # Create leave request
+        leave_data = {
+            "user_id": uid,
+            "leave_type": request.leave_type,
+            "start_date": request.start_date,
+            "end_date": request.end_date,
+            "remarks": request.remarks or "",
+            "status": "Pending",
+            "admin_comment": None,
+            "created_at": dt_module.now().isoformat()
+        }
+        
+        # Add to Firestore
+        doc_ref = db.collection("leaves").add(leave_data)
+        leave_id = doc_ref[1].id
+        
+        print(f"[LEAVE APPLY] User {uid} applied for {request.leave_type} leave from {request.start_date} to {request.end_date}")
+        
+        return {
+            "message": "Leave application submitted successfully",
+            "leave_id": leave_id,
+            "status": "Pending",
+            **leave_data
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[LEAVE APPLY ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error applying for leave: {str(e)}")
+
+
+@app.get("/leave/my", tags=["Leave"])
+async def get_my_leaves(
+    uid: str = Depends(verify_firebase_token)
+):
+    """
+    Get employee's own leave requests.
+    Returns all leave requests for the authenticated user.
+    """
+    if not db:
+        raise HTTPException(status_code=500, detail="Firestore not configured")
+    
+    try:
+        # Query leaves for this user
+        leaves_query = db.collection("leaves").where("user_id", "==", uid)
+        
+        leaves = []
+        for doc in leaves_query.stream():
+            leave_data = doc.to_dict()
+            leaves.append(LeaveRecord(
+                leave_id=doc.id,
+                user_id=uid,
+                user_name=None,
+                user_email=None,
+                leave_type=leave_data.get("leave_type", ""),
+                start_date=leave_data.get("start_date", ""),
+                end_date=leave_data.get("end_date", ""),
+                remarks=leave_data.get("remarks"),
+                status=leave_data.get("status", "Pending"),
+                admin_comment=leave_data.get("admin_comment"),
+                created_at=leave_data.get("created_at", "")
+            ))
+        
+        # Sort by created_at descending (newest first)
+        leaves.sort(key=lambda x: x.created_at, reverse=True)
+        
+        return {
+            "user_id": uid,
+            "leaves": leaves,
+            "total": len(leaves)
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[GET MY LEAVES ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching leaves: {str(e)}")
+
+
+@app.get("/leave/all", tags=["Leave"])
+async def get_all_leaves(
+    status: Optional[str] = None,
+    uid: str = Depends(verify_firebase_token)
+):
+    """
+    Get all leave requests (Admin only).
+    - Optionally filter by status (Pending, Approved, Rejected)
+    - Returns leave requests with user info
+    """
+    if not db:
+        raise HTTPException(status_code=500, detail="Firestore not configured")
+    
+    try:
+        # Verify user is admin
+        user_doc = db.collection("users").document(uid).get()
+        if not user_doc.exists:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user_data = user_doc.to_dict()
+        if user_data.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Only admins can view all leave requests")
+        
+        # Query all leaves
+        leaves_query = db.collection("leaves")
+        
+        leaves = []
+        user_cache = {}  # Cache user info to avoid repeated queries
+        
+        for doc in leaves_query.stream():
+            leave_data = doc.to_dict()
+            
+            # Filter by status if specified
+            if status and leave_data.get("status") != status:
+                continue
+            
+            # Get user info (with caching)
+            leave_user_id = leave_data.get("user_id")
+            if leave_user_id not in user_cache:
+                leave_user_doc = db.collection("users").document(leave_user_id).get()
+                if leave_user_doc.exists:
+                    leave_user_data = leave_user_doc.to_dict()
+                    user_cache[leave_user_id] = {
+                        "name": leave_user_data.get("full_name") or leave_user_data.get("displayName") or "Unknown",
+                        "email": leave_user_data.get("email", "")
+                    }
+                else:
+                    user_cache[leave_user_id] = {"name": "Unknown", "email": ""}
+            
+            leaves.append(LeaveRecord(
+                leave_id=doc.id,
+                user_id=leave_user_id,
+                user_name=user_cache[leave_user_id]["name"],
+                user_email=user_cache[leave_user_id]["email"],
+                leave_type=leave_data.get("leave_type", ""),
+                start_date=leave_data.get("start_date", ""),
+                end_date=leave_data.get("end_date", ""),
+                remarks=leave_data.get("remarks"),
+                status=leave_data.get("status", "Pending"),
+                admin_comment=leave_data.get("admin_comment"),
+                created_at=leave_data.get("created_at", "")
+            ))
+        
+        # Sort by created_at descending (newest first)
+        leaves.sort(key=lambda x: x.created_at, reverse=True)
+        
+        return {
+            "leaves": leaves,
+            "total": len(leaves),
+            "filter_status": status
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[GET ALL LEAVES ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching leaves: {str(e)}")
+
+
+@app.put("/leave/{leave_id}/approve", tags=["Leave"])
+async def approve_leave(
+    leave_id: str,
+    request: LeaveActionRequest,
+    uid: str = Depends(verify_firebase_token)
+):
+    """
+    Approve a leave request (Admin only).
+    - Updates leave status to 'Approved'
+    - Adds admin comment if provided
+    - Updates attendance records for leave dates as 'Leave'
+    """
+    if not db:
+        raise HTTPException(status_code=500, detail="Firestore not configured")
+    
+    try:
+        from datetime import datetime as dt_module, timedelta
+        
+        # Verify user is admin
+        user_doc = db.collection("users").document(uid).get()
+        if not user_doc.exists:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user_data = user_doc.to_dict()
+        if user_data.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Only admins can approve leave requests")
+        
+        # Get leave request
+        leave_doc = db.collection("leaves").document(leave_id).get()
+        if not leave_doc.exists:
+            raise HTTPException(status_code=404, detail="Leave request not found")
+        
+        leave_data = leave_doc.to_dict()
+        
+        if leave_data.get("status") != "Pending":
+            raise HTTPException(status_code=400, detail=f"Cannot approve leave that is already {leave_data.get('status')}")
+        
+        # Update leave status
+        db.collection("leaves").document(leave_id).update({
+            "status": "Approved",
+            "admin_comment": request.admin_comment or "",
+            "approved_by": uid,
+            "approved_at": dt_module.now().isoformat()
+        })
+        
+        # Update attendance records for leave dates
+        start_date = dt_module.strptime(leave_data.get("start_date"), "%Y-%m-%d")
+        end_date = dt_module.strptime(leave_data.get("end_date"), "%Y-%m-%d")
+        leave_user_id = leave_data.get("user_id")
+        
+        current_date = start_date
+        while current_date <= end_date:
+            date_str = current_date.strftime("%Y-%m-%d")
+            
+            # Check if attendance record exists for this date
+            att_query = db.collection("attendance").where("user_id", "==", leave_user_id).where("date", "==", date_str).limit(1)
+            att_docs = list(att_query.stream())
+            
+            if att_docs:
+                # Update existing record
+                db.collection("attendance").document(att_docs[0].id).update({
+                    "status": "Leave",
+                    "leave_type": leave_data.get("leave_type")
+                })
+            else:
+                # Create new attendance record with Leave status
+                db.collection("attendance").add({
+                    "user_id": leave_user_id,
+                    "date": date_str,
+                    "check_in": None,
+                    "check_out": None,
+                    "status": "Leave",
+                    "leave_type": leave_data.get("leave_type"),
+                    "created_at": dt_module.now().isoformat()
+                })
+            
+            current_date += timedelta(days=1)
+        
+        print(f"[LEAVE APPROVE] Leave {leave_id} approved by admin {uid}")
+        
+        return {
+            "message": "Leave approved successfully",
+            "leave_id": leave_id,
+            "status": "Approved"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[LEAVE APPROVE ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error approving leave: {str(e)}")
+
+
+@app.put("/leave/{leave_id}/reject", tags=["Leave"])
+async def reject_leave(
+    leave_id: str,
+    request: LeaveActionRequest,
+    uid: str = Depends(verify_firebase_token)
+):
+    """
+    Reject a leave request (Admin only).
+    - Updates leave status to 'Rejected'
+    - Adds admin comment if provided
+    """
+    if not db:
+        raise HTTPException(status_code=500, detail="Firestore not configured")
+    
+    try:
+        from datetime import datetime as dt_module
+        
+        # Verify user is admin
+        user_doc = db.collection("users").document(uid).get()
+        if not user_doc.exists:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user_data = user_doc.to_dict()
+        if user_data.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Only admins can reject leave requests")
+        
+        # Get leave request
+        leave_doc = db.collection("leaves").document(leave_id).get()
+        if not leave_doc.exists:
+            raise HTTPException(status_code=404, detail="Leave request not found")
+        
+        leave_data = leave_doc.to_dict()
+        
+        if leave_data.get("status") != "Pending":
+            raise HTTPException(status_code=400, detail=f"Cannot reject leave that is already {leave_data.get('status')}")
+        
+        # Update leave status
+        db.collection("leaves").document(leave_id).update({
+            "status": "Rejected",
+            "admin_comment": request.admin_comment or "",
+            "rejected_by": uid,
+            "rejected_at": dt_module.now().isoformat()
+        })
+        
+        print(f"[LEAVE REJECT] Leave {leave_id} rejected by admin {uid}")
+        
+        return {
+            "message": "Leave rejected",
+            "leave_id": leave_id,
+            "status": "Rejected"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[LEAVE REJECT ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error rejecting leave: {str(e)}")
+
+
+# ==================== Payroll Endpoints ====================
+
+@app.get("/payroll/my", tags=["Payroll"])
+async def get_my_payroll(
+    uid: str = Depends(verify_firebase_token)
+):
+    """
+    Get employee's own payroll details (read-only).
+    Returns salary structure for the authenticated employee.
+    """
+    if not db:
+        raise HTTPException(status_code=500, detail="Firestore not configured")
+    
+    try:
+        # Get user document
+        user_doc = db.collection("users").document(uid).get()
+        
+        if not user_doc.exists:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user_data = user_doc.to_dict()
+        
+        # Extract payroll data from salary_structure or payroll field
+        basic_pay = user_data.get("basic_pay", 0) or user_data.get("salary_structure", {}).get("basic_pay", 0)
+        allowances = user_data.get("allowances", 0) or user_data.get("salary_structure", {}).get("allowances", 0)
+        deductions = user_data.get("deductions", 0) or user_data.get("salary_structure", {}).get("deductions", 0)
+        net_salary = user_data.get("net_salary", 0) or user_data.get("salary_structure", {}).get("net_salary", 0)
+        
+        # Auto-calculate net salary if not set
+        if net_salary == 0 and (basic_pay > 0 or allowances > 0):
+            net_salary = basic_pay + allowances - deductions
+        
+        return PayrollData(
+            user_id=uid,
+            user_name=user_data.get("full_name") or user_data.get("displayName"),
+            user_email=user_data.get("email"),
+            basic_pay=float(basic_pay),
+            allowances=float(allowances),
+            deductions=float(deductions),
+            net_salary=float(net_salary),
+            pay_cycle="Monthly",
+            updated_at=user_data.get("payroll_updated_at") or user_data.get("last_updated")
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[GET MY PAYROLL ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching payroll: {str(e)}")
+
+
+@app.get("/payroll/all", tags=["Payroll"])
+async def get_all_payroll(
+    uid: str = Depends(verify_firebase_token)
+):
+    """
+    Get payroll details of all employees (Admin only).
+    Returns list of employees with their salary structures.
+    """
+    if not db:
+        raise HTTPException(status_code=500, detail="Firestore not configured")
+    
+    try:
+        # Verify user is admin
+        admin_doc = db.collection("users").document(uid).get()
+        if not admin_doc.exists:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        admin_data = admin_doc.to_dict()
+        if admin_data.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Only admins can view all payroll data")
+        
+        # Get all employees
+        users_query = db.collection("users").where("role", "==", "employee")
+        
+        payroll_list = []
+        for doc in users_query.stream():
+            user_data = doc.to_dict()
+            user_id = doc.id
+            
+            # Extract payroll data
+            basic_pay = user_data.get("basic_pay", 0) or user_data.get("salary_structure", {}).get("basic_pay", 0)
+            allowances = user_data.get("allowances", 0) or user_data.get("salary_structure", {}).get("allowances", 0)
+            deductions = user_data.get("deductions", 0) or user_data.get("salary_structure", {}).get("deductions", 0)
+            net_salary = user_data.get("net_salary", 0) or user_data.get("salary_structure", {}).get("net_salary", 0)
+            
+            # Auto-calculate net salary if not set
+            if net_salary == 0 and (basic_pay > 0 or allowances > 0):
+                net_salary = basic_pay + allowances - deductions
+            
+            payroll_list.append(PayrollData(
+                user_id=user_id,
+                user_name=user_data.get("full_name") or user_data.get("displayName") or "Not Set",
+                user_email=user_data.get("email"),
+                basic_pay=float(basic_pay),
+                allowances=float(allowances),
+                deductions=float(deductions),
+                net_salary=float(net_salary),
+                pay_cycle="Monthly",
+                updated_at=user_data.get("payroll_updated_at") or user_data.get("last_updated")
+            ))
+        
+        # Sort by name
+        payroll_list.sort(key=lambda x: x.user_name or "")
+        
+        return {
+            "employees": payroll_list,
+            "total": len(payroll_list)
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[GET ALL PAYROLL ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching payroll: {str(e)}")
+
+
+@app.put("/payroll/{user_id}/update", tags=["Payroll"])
+async def update_payroll(
+    user_id: str,
+    request: PayrollUpdateRequest,
+    uid: str = Depends(verify_firebase_token)
+):
+    """
+    Update employee payroll/salary structure (Admin only).
+    - Auto-calculates net salary
+    - Updates immediately in employee's record
+    """
+    if not db:
+        raise HTTPException(status_code=500, detail="Firestore not configured")
+    
+    try:
+        from datetime import datetime as dt_module
+        
+        # Verify user is admin
+        admin_doc = db.collection("users").document(uid).get()
+        if not admin_doc.exists:
+            raise HTTPException(status_code=404, detail="Admin user not found")
+        
+        admin_data = admin_doc.to_dict()
+        if admin_data.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Only admins can update payroll")
+        
+        # Check if target employee exists
+        employee_doc = db.collection("users").document(user_id).get()
+        if not employee_doc.exists:
+            raise HTTPException(status_code=404, detail="Employee not found")
+        
+        employee_data = employee_doc.to_dict()
+        
+        # Get current values or defaults
+        current_basic = employee_data.get("basic_pay", 0) or employee_data.get("salary_structure", {}).get("basic_pay", 0)
+        current_allowances = employee_data.get("allowances", 0) or employee_data.get("salary_structure", {}).get("allowances", 0)
+        current_deductions = employee_data.get("deductions", 0) or employee_data.get("salary_structure", {}).get("deductions", 0)
+        
+        # Apply updates
+        new_basic = request.basic_pay if request.basic_pay is not None else current_basic
+        new_allowances = request.allowances if request.allowances is not None else current_allowances
+        new_deductions = request.deductions if request.deductions is not None else current_deductions
+        
+        # Auto-calculate net salary
+        new_net_salary = new_basic + new_allowances - new_deductions
+        
+        # Update employee document
+        update_data = {
+            "basic_pay": float(new_basic),
+            "allowances": float(new_allowances),
+            "deductions": float(new_deductions),
+            "net_salary": float(new_net_salary),
+            "payroll_updated_at": dt_module.now().isoformat(),
+            "payroll_updated_by": uid
+        }
+        
+        db.collection("users").document(user_id).update(update_data)
+        
+        print(f"[PAYROLL UPDATE] Admin {uid} updated payroll for employee {user_id}")
+        
+        return {
+            "message": "Payroll updated successfully",
+            "user_id": user_id,
+            "basic_pay": float(new_basic),
+            "allowances": float(new_allowances),
+            "deductions": float(new_deductions),
+            "net_salary": float(new_net_salary),
+            "updated_at": update_data["payroll_updated_at"]
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[PAYROLL UPDATE ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating payroll: {str(e)}")
 
 
 # ==================== Error Handlers ====================

@@ -91,16 +91,26 @@ const EmployeeDashboard = () => {
             <div className="card-arrow">→</div>
           </div>
 
-          <div className="feature-card">
+          <div 
+            className="feature-card clickable"
+            onClick={() => navigate('/employee/leave')}
+            style={{ cursor: 'pointer' }}
+          >
             <div className="feature-icon">🏖️</div>
             <h3>Leave</h3>
             <p>Request and track your leaves</p>
+            <div className="card-arrow">→</div>
           </div>
 
-          <div className="feature-card">
+          <div 
+            className="feature-card clickable"
+            onClick={() => navigate('/employee/payroll')}
+            style={{ cursor: 'pointer' }}
+          >
             <div className="feature-icon">💰</div>
             <h3>Payroll</h3>
             <p>View your salary and payroll information</p>
+            <div className="card-arrow">→</div>
           </div>
         </div>
 

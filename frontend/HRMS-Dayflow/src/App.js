@@ -7,6 +7,10 @@ import EmployeeDashboard from './components/EmployeeDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeProfile from './components/EmployeeProfile';
 import Attendance from './components/Attendance';
+import Leave from './components/Leave';
+import Payroll from './components/Payroll';
+import AdminLeaveApproval from './components/AdminLeaveApproval';
+import AdminPayroll from './components/AdminPayroll';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
@@ -46,6 +50,22 @@ function App() {
               }
             />
             <Route
+              path="/employee/leave"
+              element={
+                <ProtectedRoute requiredRole="employee">
+                  <Leave />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/employee/payroll"
+              element={
+                <ProtectedRoute requiredRole="employee">
+                  <Payroll />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin/dashboard"
               element={
                 <ProtectedRoute requiredRole="admin">
@@ -58,6 +78,22 @@ function App() {
               element={
                 <ProtectedRoute requiredRole="admin">
                   <Attendance />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/leave"
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <AdminLeaveApproval />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/payroll"
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <AdminPayroll />
                 </ProtectedRoute>
               }
             />

@@ -64,6 +64,28 @@ const AdminDashboard = () => {
             <div className="card-arrow">→</div>
           </div>
 
+          <div 
+            className="feature-card clickable"
+            onClick={() => navigate('/admin/leave')}
+            style={{ cursor: 'pointer' }}
+          >
+            <div className="feature-icon">📋</div>
+            <h3>Leave Approval</h3>
+            <p>Review and approve leave requests</p>
+            <div className="card-arrow">→</div>
+          </div>
+
+          <div 
+            className="feature-card clickable"
+            onClick={() => navigate('/admin/payroll')}
+            style={{ cursor: 'pointer' }}
+          >
+            <div className="feature-icon">💵</div>
+            <h3>Payroll Management</h3>
+            <p>View and update employee salaries</p>
+            <div className="card-arrow">→</div>
+          </div>
+
           <div className="feature-card">
             <div className="feature-icon">📊</div>
             <h3>Reports</h3>
