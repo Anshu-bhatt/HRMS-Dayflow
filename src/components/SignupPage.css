@@ -1,0 +1,390 @@
+/* Signup Page Styling */
+.signup-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.signup-container {
+  width: 100%;
+  max-width: 900px;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  animation: slideUp 0.5s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Header */
+.signup-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 40px;
+  text-align: center;
+}
+
+.logo-section h1 {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+.logo-section p {
+  margin: 8px 0 0 0;
+  font-size: 14px;
+  opacity: 0.9;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* User Type Selector */
+.user-type-selector {
+  display: flex;
+  gap: 20px;
+  padding: 30px;
+  justify-content: center;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.type-btn {
+  flex: 1;
+  max-width: 200px;
+  padding: 20px;
+  border: 2px solid #e0e0e0;
+  background: white;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #666;
+}
+
+.type-btn:hover {
+  border-color: #667eea;
+  background: #f0f4ff;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+}
+
+.type-btn.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-color: transparent;
+}
+
+.type-icon {
+  font-size: 28px;
+}
+
+.type-label {
+  font-size: 16px;
+  text-transform: capitalize;
+}
+
+/* Signup Form */
+.signup-form {
+  padding: 40px;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.signup-form h2 {
+  margin: 0 0 30px 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+  text-align: center;
+}
+
+/* Error Message */
+.error-message {
+  background: #fee;
+  color: #c33;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  border-left: 4px solid #c33;
+  animation: shake 0.3s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+/* Form Groups */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.form-group input:disabled,
+.form-group select:disabled {
+  background: #f5f5f5;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.help-text {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #999;
+  font-style: italic;
+}
+
+/* Terms Section */
+.terms-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 25px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.terms-section input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
+.terms-section a {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.terms-section a:hover {
+  text-decoration: underline;
+}
+
+/* Signup Button */
+.signup-btn {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.signup-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+}
+
+.signup-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.signup-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Login Link */
+.login-link {
+  text-align: center;
+  padding: 0 40px 30px 40px;
+  font-size: 14px;
+  color: #666;
+}
+
+.login-link a {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.login-link a:hover {
+  text-decoration: underline;
+}
+
+/* Features Section */
+.features-section {
+  background: #f8f9fa;
+  padding: 40px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.features-section h3 {
+  text-align: center;
+  margin: 0 0 30px 0;
+  font-size: 20px;
+  color: #333;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.feature-item {
+  text-align: center;
+  padding: 20px;
+}
+
+.feature-icon {
+  display: block;
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+
+.feature-item h4 {
+  margin: 12px 0 8px 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.feature-item p {
+  margin: 0;
+  font-size: 13px;
+  color: #999;
+  line-height: 1.5;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .signup-container {
+    border-radius: 16px;
+  }
+
+  .signup-header {
+    padding: 30px 20px;
+  }
+
+  .logo-section h1 {
+    font-size: 24px;
+  }
+
+  .user-type-selector {
+    padding: 20px;
+    gap: 10px;
+  }
+
+  .type-btn {
+    max-width: 150px;
+    padding: 15px;
+  }
+
+  .signup-form {
+    padding: 25px;
+  }
+
+  .signup-form h2 {
+    font-size: 20px;
+    margin-bottom: 20px;
+  }
+
+  .features-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .signup-page {
+    padding: 10px;
+  }
+
+  .signup-header {
+    padding: 20px;
+  }
+
+  .logo-section h1 {
+    font-size: 20px;
+  }
+
+  .logo-section p {
+    font-size: 12px;
+  }
+
+  .user-type-selector {
+    flex-direction: column;
+    padding: 15px;
+  }
+
+  .type-btn {
+    max-width: 100%;
+  }
+
+  .signup-form {
+    padding: 20px;
+  }
+
+  .signup-form h2 {
+    font-size: 18px;
+    margin-bottom: 15px;
+  }
+
+  .form-group {
+    margin-bottom: 15px;
+  }
+
+  .features-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .features-section {
+    padding: 25px;
+  }
+}
