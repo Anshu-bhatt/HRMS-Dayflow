@@ -1,5 +1,8 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { auth, db } from '../config/firebase';
 import './LoginPage.css';
 
 const LoginPage = () => {
@@ -9,6 +12,8 @@ const LoginPage = () => {
     email: '',
     password: ''
   });
+  const [error, setError] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
 
   const handleChange = (e) => {
     setFormData({
@@ -19,10 +24,75 @@ const LoginPage = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Add your login logic here
-    console.log('Login attempt:', { role, ...formData });
-    // Navigate to dashboard after login
-    // navigate(`/dashboard/${role}`);
+    
+    // Basic validation
+    if (!formData.email || !formData.password) {
+      setError('Please enter both email and password');
+      return;
+    }
+
+    loginUser();
+  };
+
+  const loginUser = async () => {
+    try {
+      setError('');
+      setLoading(true);
+
+      // Authenticate with Firebase
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        formData.email,
+        formData.password
+      );
+
+      const user = userCredential.user;
+
+      // Verify user type from Firestore
+      const usersRef = collection(db, 'users');
+      const userQuery = query(usersRef, where('userId', '==', user.uid));
+      const querySnapshot = await getDocs(userQuery);
+
+      if (querySnapshot.empty) {
+        setError('User profile not found. Please contact support.');
+        return;
+      }
+
+      const userDoc = querySnapshot.docs[0].data();
+      const userTypeFromDb = userDoc.userType;
+
+      // Verify role matches
+      if (userTypeFromDb !== role) {
+        setError(`This account is registered as ${userTypeFromDb}. Please login with the correct role.`);
+        // Sign out the user
+        await auth.signOut();
+        return;
+      }
+
+      console.log('Login successful:', { role, email: formData.email });
+    
+    if (role === 'admin') {
+      navigate('/admin/dashboard');
+    } else {
+      // Navigate to employee dashboard (implement later)
+      alert('Employee dashboard coming soon!');
+      navigate('/');
+    }
+    } catch (err) {
+      // Handle specific Firebase errors
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+        setError('Invalid email or password. Please try again.');
+      } else if (err.code === 'auth/user-disabled') {
+        setError('This account has been disabled. Please contact support.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Too many failed login attempts. Please try again later.');
+      } else {
+        setError(err.message || 'Login failed. Please try again.');
+      }
+      console.error('Login error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const isAdmin = role === 'admin';
@@ -60,6 +130,8 @@ const LoginPage = () => {
           </div>
 
           <form className="login-form" onSubmit={handleSubmit}>
+              {error && <div className="error-message">{error}</div>}
+
             <div className="form-group">
               <label htmlFor="email">Email Address</label>
               <input
@@ -69,6 +141,7 @@ const LoginPage = () => {
                 value={formData.email}
                 onChange={handleChange}
                 placeholder="Enter your email"
+                  disabled={loading}
                 required
               />
             </div>
@@ -82,25 +155,26 @@ const LoginPage = () => {
                 value={formData.password}
                 onChange={handleChange}
                 placeholder="Enter your password"
+                  disabled={loading}
                 required
               />
             </div>
 
             <div className="form-options">
               <label className="remember-me">
-                <input type="checkbox" />
+                  <input type="checkbox" disabled={loading} />
                 <span>Remember me</span>
               </label>
               <a href="#" className="forgot-password">Forgot password?</a>
             </div>
 
-            <button type="submit" className={`login-button ${role}-button`}>
-              Sign In
+              <button type="submit" className={`login-button ${role}-button`} disabled={loading}>
+                {loading ? 'Signing In...' : 'Sign In'}
             </button>
           </form>
 
           <div className="login-footer">
-            <p>Don't have an account? <a href="#">Sign Up</a></p>
+            <p>Don't have an account? <a href="#" onClick={(e) => { e.preventDefault(); navigate('/signup'); }}>Sign Up</a></p>
           </div>
         </div>
       </div>
